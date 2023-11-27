@@ -1,0 +1,65 @@
+version: '3'
+
+networks:
+  local:
+    driver: bridge
+
+services:
+  spark-master:
+    image: spark
+    command: /bin/bash -c "/opt/spark/sbin/start-master.sh && tail -f /dev/null"
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    networks:
+      - local
+    depends_on:
+      - hadoop-namenode
+
+  spark-node-1:
+    image: spark
+    command: /bin/bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
+    ports:
+      - "8081:8081"
+      - "8082:8082"
+    environment:
+      - SPARK_WORKER_PORT=8081
+      - SPARK_WORKER_WEBUI_PORT=8082
+    networks:
+      - local
+    depends_on:
+      - spark-master
+
+  hadoop-namenode:
+    image: apache/hadoop:3
+    command:
+      - "hdfs"
+      - "namenode"
+    ports:
+      - "8020:8020"
+      - "9870:9870"
+    environment:
+      - ENSURE_NAMENODE_DIR=/tmp/hadoop-root/dfs/name
+    env_file:
+      - hadoop-env
+    networks:
+      - local
+
+  hadoop-datanode1:
+    hostname: my.container1
+    image: apache/hadoop:3
+    command:
+      - "hdfs"
+      - "datanode"
+    ports:
+      - "9090:9090"
+      - "9091:9091"
+    environment:
+      - HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:9090
+      - HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:9091
+    env_file:
+      - hadoop-env
+    networks:
+      - local
+    depends_on:
+      - hadoop-namenode
