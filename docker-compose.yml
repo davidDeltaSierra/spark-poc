@@ -30,6 +30,20 @@ services:
     depends_on:
       - spark-master
 
+  spark-node-2:
+    image: spark
+    command: /bin/bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
+    ports:
+      - "8083:8083"
+      - "8084:8084"
+    environment:
+      - SPARK_WORKER_PORT=8083
+      - SPARK_WORKER_WEBUI_PORT=8084
+    networks:
+      - local
+    depends_on:
+      - spark-master
+
   hadoop-namenode:
     image: apache/hadoop:3
     command:
@@ -46,7 +60,7 @@ services:
       - local
 
   hadoop-datanode1:
-    hostname: my.container1
+    hostname: hadoop-datanode1
     image: apache/hadoop:3
     command:
       - "hdfs"
@@ -57,6 +71,25 @@ services:
     environment:
       - HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:9090
       - HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:9091
+    env_file:
+      - hadoop-env
+    networks:
+      - local
+    depends_on:
+      - hadoop-namenode
+
+  hadoop-datanode2:
+    hostname: hadoop-datanode2
+    image: apache/hadoop:3
+    command:
+      - "hdfs"
+      - "datanode"
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      - HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:9092
+      - HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:9093
     env_file:
       - hadoop-env
     networks:
