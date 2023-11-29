@@ -16,7 +16,7 @@ services:
     depends_on:
       - hadoop-namenode
 
-  spark-node-1:
+  spark-worker-1:
     image: spark
     command: /bin/bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
     ports:
@@ -30,7 +30,7 @@ services:
     depends_on:
       - spark-master
 
-  spark-node-2:
+  spark-worker-2:
     image: spark
     command: /bin/bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
     ports:
