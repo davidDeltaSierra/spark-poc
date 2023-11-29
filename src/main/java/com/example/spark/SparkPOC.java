@@ -5,10 +5,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 
 import java.net.URI;
+
+import static org.apache.spark.sql.functions.*;
 
 @Slf4j
 public class SparkPOC {
@@ -21,25 +25,65 @@ public class SparkPOC {
                 .config("spark.driver.port", "8888")
                 .config("spark.driver.bindAddress", "0.0.0.0")
                 .getOrCreate();
-        fileSystemCopyFromLocalFile();
-        readAndWriteInParquet(spark);
+        //fileSystemCopyFromLocalFile();
+        //readAllJsonAndWriteInParquet(spark);
+        //writeProductsAndNfesParquet(spark);
+        //joinTables(spark);
         spark.close();
     }
 
-    private static void readAndWriteInParquet(SparkSession spark) {
-        spark.read()
-                .json(HDFS + "/deals.json")
+    private static Dataset<Row> joinTables(SparkSession spark) {
+        Dataset<Row> nfes = spark.read()
+                .parquet(HDFS + "/nfes.parquet");
+        Dataset<Row> products = spark.read()
+                .parquet(HDFS + "/products.parquet")
+                .withColumnRenamed("title", "p_title")
+                .withColumnRenamed("total_amount", "p_total_amount");
+
+        return nfes.join(products, col("qrcode").equalTo(col("nfe_qrcode")))
+                .groupBy("qrcode", nfes.columns())
+                .agg(collect_list(
+                        struct(
+                                col("p_title").alias("title"),
+                                col("price"),
+                                col("p_total_amount").alias("total_amount"),
+                                col("discount_amount"),
+                                col("tax_amount"),
+                                col("quantity"),
+                                col("unit"),
+                                col("fields")
+                        )
+                ).alias("products"));
+    }
+
+    private static void writeProductsAndNfesParquet(SparkSession spark) {
+        Dataset<Row> allJsonFilesDataset = spark.read()
+                .option("multiline", true)
+                .format("json")
+                .load(HDFS + "/");
+
+        allJsonFilesDataset.drop("products")
                 .write()
                 .mode(SaveMode.Append)
-                .parquet(HDFS + "/deals-parquet.parquet");
+                .parquet(HDFS + "/nfes.parquet");
+
+        allJsonFilesDataset.select(col("qrcode"), explode(col("products")).alias("product"))
+                .select(col("qrcode").alias("nfe_qrcode"), col("product.*"))
+                .write()
+                .mode(SaveMode.Append)
+                .parquet(HDFS + "/products.parquet");
     }
 
     @SneakyThrows
     private static void fileSystemCopyFromLocalFile() {
         FileSystem fs = factoryFileSystem();
         fs.copyFromLocalFile(
-                new Path("C:\\Users\\David\\Music\\deals.json"),
-                new Path("/deals.json")
+                new Path("C:\\Users\\David\\Music\\nfes\\ac.json"),
+                new Path("/ac.json")
+        );
+        fs.copyFromLocalFile(
+                new Path("C:\\Users\\David\\Music\\nfes\\nota.json"),
+                new Path("/nota.json")
         );
         fs.close();
     }
