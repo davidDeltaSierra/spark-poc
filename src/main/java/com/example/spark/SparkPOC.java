@@ -26,17 +26,16 @@ public class SparkPOC {
                 .config("spark.driver.bindAddress", "0.0.0.0")
                 .getOrCreate();
         //fileSystemCopyFromLocalFile();
-        //readAllJsonAndWriteInParquet(spark);
-        //writeProductsAndNfesParquet(spark);
+        //writeProductsAndNFESParquet(spark);
         //joinTables(spark);
         spark.close();
     }
 
     private static Dataset<Row> joinTables(SparkSession spark) {
         Dataset<Row> nfes = spark.read()
-                .parquet(HDFS + "/nfes.parquet");
+                .parquet(HDFS + "/nfes_parquet");
         Dataset<Row> products = spark.read()
-                .parquet(HDFS + "/products.parquet")
+                .parquet(HDFS + "/products_parquet")
                 .withColumnRenamed("title", "p_title")
                 .withColumnRenamed("total_amount", "p_total_amount");
 
@@ -56,22 +55,29 @@ public class SparkPOC {
                 ).alias("products"));
     }
 
-    private static void writeProductsAndNfesParquet(SparkSession spark) {
+    private static void writeProductsAndNFESParquet(SparkSession spark) {
+        final long version = System.currentTimeMillis();
+        final String partitionKey = "version";
+
         Dataset<Row> allJsonFilesDataset = spark.read()
                 .option("multiline", true)
                 .format("json")
-                .load(HDFS + "/");
+                .load(HDFS + "/raw_notes_json/");
 
         allJsonFilesDataset.drop("products")
+                .withColumn(partitionKey, lit(version))
                 .write()
+                .partitionBy(partitionKey)
                 .mode(SaveMode.Append)
-                .parquet(HDFS + "/nfes.parquet");
+                .parquet(HDFS + "/nfes_parquet");
 
         allJsonFilesDataset.select(col("qrcode"), explode(col("products")).alias("product"))
                 .select(col("qrcode").alias("nfe_qrcode"), col("product.*"))
+                .withColumn(partitionKey, lit(version))
                 .write()
+                .partitionBy(partitionKey)
                 .mode(SaveMode.Append)
-                .parquet(HDFS + "/products.parquet");
+                .parquet(HDFS + "/products_parquet");
     }
 
     @SneakyThrows
